@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>坦克大战 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; }
+
+    /* ── HUD ── */
+    #hud {
+      position: fixed; inset: 0; pointer-events: none;
+      display: none; flex-direction: column; justify-content: space-between; z-index: 10;
+    }
+    .hud-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 14px; }
+    .hud-row.bottom { align-items: flex-end; }
+    .panel {
+      background: rgba(0,0,0,.65); border: 1px solid rgba(255,255,255,.18);
+      border-radius: 10px; padding: 10px 16px; color: #eee; font-size: 13px; line-height: 1.7;
+    }
+    .bar-wrap { width: 170px; height: 11px; background: rgba(255,255,255,.15); border-radius: 6px; overflow: hidden; margin-top: 5px; }
+    #hp-fill { height: 100%; border-radius: 6px; transition: width .25s, background .25s; }
+    .ammo-icon { color: #f39c12; }
+    #wave-num { color: #f1c40f; font-size: 22px; font-weight: bold; }
+    #kill-num { color: #e74c3c; font-size: 18px; font-weight: bold; }
+    #minimap { border: 2px solid rgba(255,255,255,.35); border-radius: 6px; display: block; }
+
+    /* crosshair */
+    #crosshair {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 11;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,.8);
+    }
+    #crosshair::before { width: 20px; height: 2px; top: -1px; left: -10px; }
+    #crosshair::after  { width: 2px; height: 20px; top: -10px; left: -1px; }
+
+    /* wave announce */
+    #wave-announce {
+      position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
+      font-size: 52px; font-weight: 900; color: #f1c40f;
+      text-shadow: 0 0 30px #f1c40f, 0 2px 4px #000;
+      pointer-events: none; z-index: 12; opacity: 0;
+      transition: opacity .5s;
+    }
+    #wave-announce.show { opacity: 1; }
+
+    /* boost/pierce indicator */
+    #status-icons {
+      position: fixed; top: 50%; right: 20px; transform: translateY(-50%);
+      pointer-events: none; z-index: 11; display: flex; flex-direction: column; gap: 6px;
+    }
+    .status-icon {
+      background: rgba(0,0,0,.7); border-radius: 8px; padding: 6px 10px;
+      font-size: 13px; color: #fff; border: 1px solid rgba(255,255,255,.2);
+      display: none;
+    }
+
+    /* ── SCREENS ── */
+    .screen {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,.88); z-index: 20;
+    }
+    .screen.hidden { display: none; }
+    .screen h1 { font-size: 62px; color: #f39c12; text-shadow: 0 0 30px #f39c12aa; margin-bottom: 6px; }
+    .screen h2 { font-size: 38px; color: #e74c3c; margin-bottom: 20px; }
+    .screen p  { color: #aaa; font-size: 15px; margin-bottom: 28px; text-align: center; line-height: 1.8; }
+    .btn {
+      background: linear-gradient(135deg,#e67e22,#f39c12);
+      color: #fff; border: none; padding: 13px 44px; font-size: 18px;
+      border-radius: 10px; cursor: pointer; margin: 7px;
+      transition: transform .15s, box-shadow .15s;
+      pointer-events: auto; font-family: inherit;
+    }
+    .btn:hover { transform: scale(1.06); box-shadow: 0 0 20px #f39c1266; }
+    .btn.grey { background: linear-gradient(135deg,#555,#777); }
+    .btn.grey:hover { box-shadow: 0 0 20px #aaa4; }
+
+    .hint {
+      color: #666; font-size: 13px; margin-top: 26px;
+      text-align: center; line-height: 2.2; pointer-events: none;
+    }
+    .hint span { color: #f39c12; }
+  </style>
+</head>
+<body>
+
+  <!-- ── GAME HUD ── -->
+  <div id="hud">
+    <div class="hud-row">
+      <div class="panel">
+        <div>❤️ 生命  <strong id="hp-text">5/5</strong></div>
+        <div class="bar-wrap"><div id="hp-fill" style="width:100%;background:#2ecc71"></div></div>
+        <div style="margin-top:6px"><span class="ammo-icon">🔫</span> 弹药 <strong id="ammo-num">30</strong></div>
+      </div>
+      <div class="panel" style="text-align:center">
+        <div>第 <span id="wave-num">1</span> 波</div>
+        <div>击杀 <span id="kill-num">0</span></div>
+        <div style="font-size:11px;color:#888;margin-top:4px">剩余 <span id="enemy-num">0</span> 敌</div>
+      </div>
+    </div>
+    <div class="hud-row bottom">
+      <div class="panel" style="font-size:12px;color:#888">
+        WASD 移动 &nbsp;|&nbsp; 鼠标瞄准 &nbsp;|&nbsp; 左键开炮 &nbsp;|&nbsp; ESC 暂停
+      </div>
+      <canvas id="minimap" width="130" height="130"></canvas>
+    </div>
+  </div>
+
+  <div id="crosshair"></div>
+  <div id="wave-announce"></div>
+  <div id="status-icons">
+    <div class="status-icon" id="icon-speed">⚡ 加速</div>
+    <div class="status-icon" id="icon-pierce">🔥 穿甲</div>
+  </div>
+
+  <!-- ── MENU ── -->
+  <div id="menu-screen" class="screen">
+    <h1>🪖 坦克大战 3D</h1>
+    <p>驾驶坦克，消灭所有敌人，挺过更多波次！<br>击毁敌人可掉落道具，获得更强战力。</p>
+    <button class="btn" id="btn-start">开始游戏</button>
+    <div class="hint">
+      <span>W A S D</span> — 移动坦克<br>
+      <span>鼠标</span> — 旋转炮塔 &nbsp;&nbsp; <span>左键</span> — 发射炮弹<br>
+      <span>ESC</span> — 暂停 / 继续<br>
+      道具: <span>❤️ 回血</span> &nbsp;<span>⚡ 加速</span> &nbsp;<span>🔥 穿甲弹</span> &nbsp;<span>💛 补充弹药</span>
+    </div>
+  </div>
+
+  <!-- ── GAME OVER ── -->
+  <div id="gameover-screen" class="screen hidden">
+    <h2 id="go-title">游戏结束</h2>
+    <p id="go-msg">你的坦克被击毁了！</p>
+    <button class="btn" id="btn-restart">重新开始</button>
+    <button class="btn grey" id="btn-menu">返回菜单</button>
+  </div>
+
+  <!-- ── PAUSE ── -->
+  <div id="pause-screen" class="screen hidden">
+    <h2 style="color:#3498db">⏸ 暂停</h2>
+    <button class="btn" id="btn-resume">继续游戏</button>
+    <button class="btn grey" id="btn-pause-menu">返回菜单</button>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

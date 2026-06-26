@@ -1,0 +1,9 @@
+{
+  "name": "tank-war-3d",
+  "version": "1.0.0",
+  "description": "3D Tank Battle Game powered by Three.js",
+  "scripts": {
+    "dev": "npx serve . -p 3000 --no-clipboard",
+    "start": "npx serve . -p 3000"
+  }
+}
